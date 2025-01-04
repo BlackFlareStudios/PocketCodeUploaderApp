@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Image to GitHub</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            font-weight: bold;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        #status {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+        button {
+            background-color: green;
+            color: white;
+            font-size: 20px;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: darkgreen;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload Image to GitHub</h1>
+
+    <!-- Form to choose image -->
+    <input type="file" id="imageFile" accept="image/*">
+    <button onclick="uploadImage()">Upload Image</button>
+
+    <p id="status"></p>
+
+    <script>
+        const token = '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';  // Replace with your GitHub PAT
+        const username = 'BlackFlareStudios';            // Replace with your GitHub username
+        const repo = 'PocketCode-Imager';              // Replace with your repository name
+        const branch = 'main';                         // Replace with the branch you want to upload to
+        const folder = 'Images';                       // Folder in the repo where the image will be uploaded
+
+        // Function to upload the image and update Uploaded.txt with the image name
+        async function uploadImage() {
+            const fileInput = document.getElementById('imageFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                document.getElementById('status').innerText = 'Please select an image.';
+                return;
+            }
+
+            // Get the file data as base64
+            const reader = new FileReader();
+            reader.onloadend = async function () {
+                const base64Data = reader.result.split(',')[1];  // Remove the "data:image/jpeg;base64," part
+
+                // Prepare data for uploading the image
+                const imageApiUrl = `https://api.github.com/repos/${username}/${repo}/contents/${folder}/${file.name}`;
+                const headers = {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json',
+                };
+
+                // Check if the file already exists in the repository
+                try {
+                    const fileCheckResponse = await fetch(imageApiUrl, {
+                        method: 'GET',
+                        headers: headers,
+                    });
+
+                    let sha = null;
+                    if (fileCheckResponse.ok) {
+                        // If the file exists, get the sha value
+                        const fileData = await fileCheckResponse.json();
+                        sha = fileData.sha;
+                    }
+
+                    // Prepare the request data for uploading (with or without sha)
+                    const data = {
+                        message: `Upload ${file.name}`,
+                        content: base64Data,
+                        branch: branch,
+                    };
+
+                    if (sha) {
+                        // If the file already exists, include sha to replace it
+                        data.sha = sha;
+                    }
+
+                    // Upload the image to GitHub
+                    const imageUploadResponse = await fetch(imageApiUrl, {
+                        method: 'PUT',
+                        headers: headers,
+                        body: JSON.stringify(data),
+                    });
+
+                    if (!imageUploadResponse.ok) {
+                        const responseData = await imageUploadResponse.json();
+                        document.getElementById('status').innerText = `Error uploading image: ${responseData.message}`;
+                        return;
+                    }
+
+                    // Once the image is uploaded, update the Uploaded.txt file with the image name
+                    const uploadedTextFileUrl = `https://api.github.com/repos/${username}/${repo}/contents/${folder}/Uploaded.txt`;
+
+                    const uploadedTextData = {
+                        message: 'Update Uploaded.txt with image name',
+                        content: btoa(file.name),  // Encode the file name to base64
+                        branch: branch,
+                    };
+
+                    const uploadedTextResponse = await fetch(uploadedTextFileUrl, {
+                        method: 'GET',
+                        headers: headers,
+                    });
+
+                    let textSha = null;
+                    if (uploadedTextResponse.ok) {
+                        const textFileData = await uploadedTextResponse.json();
+                        textSha = textFileData.sha;
+                    }
+
+                    if (textSha) {
+                        uploadedTextData.sha = textSha;  // Include sha to update the existing file
+                    }
+
+                    // Update the Uploaded.txt file with the uploaded image name
+                    const uploadedTextUploadResponse = await fetch(uploadedTextFileUrl, {
+                        method: 'PUT',
+                        headers: headers,
+                        body: JSON.stringify(uploadedTextData),
+                    });
+
+                    if (uploadedTextUploadResponse.ok) {
+                        document.getElementById('status').innerText = `Image uploaded successfully!`;
+                    } else {
+                        const responseData = await uploadedTextUploadResponse.json();
+                        document.getElementById('status').innerText = `Error updating Uploaded.txt: ${responseData.message}`;
+                    }
+                } catch (error) {
+                    document.getElementById('status').innerText = `Error: ${error.message}`;
+                }
+            };
+
+            reader.readAsDataURL(file); // Convert the file to base64
+        }
+    </script>
+</body>
+</html>
